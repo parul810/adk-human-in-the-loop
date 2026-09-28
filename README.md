@@ -69,3 +69,40 @@ Hit `Reject` or `Approve`. The FastAPI server immediately resumes the agent thro
 The resumed reply is produced server-side, so the ADK web UI doesn't show it live: refresh the page (or re-select the session) to see it.
 
 ![ADK Web Interface](images/agent_workflow.png)
+
+
+## Reporting progress to an orchestrator (optional)
+
+A run that pauses for a manager can last minutes or days. The bundled
+[`agent-lifecycle-events`](agent-lifecycle-events/README.md) plugin lets an
+outside system, such as a workflow engine, follow it: it POSTs
+`agent.started`, `agent.waiting`, `agent.resumed`, `agent.completed` and
+`agent.failed` events to a webhook, and `agent.completed` carries the
+manager's decision as `data.outcome` (`approved` or `rejected`).
+
+`uv sync` installs the plugin (it is a local path dependency). It stays off
+unless you attach it and point it at a webhook:
+
+```bash
+LIFECYCLE_SINKS=webhook \
+LIFECYCLE_WEBHOOK_URL=http://localhost:8080/engine-rest/agent-webhook/events \
+LIFECYCLE_WEBHOOK_ALLOWED_HOSTS=localhost \
+LIFECYCLE_OUTCOME_FROM=request_approval.status \
+uv run adk web --extra_plugins agent_lifecycle.LifecyclePlugin
+```
+
+- `LIFECYCLE_SINKS` turns the plugin on. Without it the plugin logs
+  `Agent lifecycle events disabled` and sends nothing.
+- `LIFECYCLE_WEBHOOK_URL` is where events are sent. Change it to your
+  orchestrator's endpoint.
+- `LIFECYCLE_WEBHOOK_ALLOWED_HOSTS` lists the hosts a session may name as its
+  own `callback_url`. A URL whose host isn't listed is ignored.
+- `LIFECYCLE_OUTCOME_FROM=request_approval.status` reads the decision from the
+  `request_approval` tool's result.
+- `LIFECYCLE_WEBHOOK_SECRET` (optional) signs each delivery in an
+  `X-Lifecycle-Signature: sha256=...` header so the receiver can verify it.
+
+Events are queued in a local SQLite outbox (`.agent_lifecycle/`) and retried
+with backoff, so they survive a restart of the agent. See the plugin's README
+for the event format, delivery guarantees and how to pass correlation ids per
+run.
