@@ -6,7 +6,17 @@
 
 This is a simple example of using [Agent Development Kit](https://google.github.io/adk-docs/) (ADK) to create a human-in-the-loop workflow.
 
-In this example we will use a human-in-the-loop workflow to send an expense request for manager approval. The agent then waits until the manager approves or rejects the request before proceeding.
+In this example we will use a human-in-the-loop workflow to send an expense request for manager approval. The agent submits the request and pauses; when the manager approves or rejects it, a webhook resumes the agent with the decision.
+
+## How it works
+
+The agent uses ADK's `LongRunningFunctionTool`, so nothing blocks while a human decides:
+
+1. The agent calls `request_approval`, which creates the request on the FastAPI server along with a callback (the ADK session and the id of this function call). The tool returns `pending` immediately, the agent tells the user it's waiting, and the run ends.
+2. The manager clicks `Approve` or `Reject` in the Streamlit dashboard.
+3. The FastAPI server calls ADK's `/run` endpoint (the webhook) with a function response carrying the decision for that same function call id. ADK replaces the `pending` result with the decision and the agent picks up where it left off.
+
+Requests (SQLite) and ADK sessions (in `.adk/`) are persisted, so a pending approval survives restarts of either server.
 
 
 ## Running the Example
@@ -15,7 +25,7 @@ We will use a FastAPI server to handle the expense requests and a Streamlit app 
 
 ### Start the FastAPI server
 
-The FastAPI server provides basic CRUD operations for the expense requests and stores them in memory in a dictionary.
+The FastAPI server provides basic CRUD operations for the expense requests, stores them in SQLite (`approvals.db`), and resumes the agent when a request is decided. It expects ADK on `localhost:8000`; override with the `ADK_URL` environment variable.
 
 ```bash
 uv run server.py
@@ -42,20 +52,20 @@ The Streamlit app is now running on `localhost:8501` and displays a manager appr
 uv run adk web
 ```
 
+This needs an `OPENAI_API_KEY` in `.env`, since the agent runs `gpt-4o-mini` via LiteLLM. ADK stores sessions in `human_in_the_loop/.adk/` by default, so they survive restarts.
+
 Navigate to `localhost:8000` in your browser to access the ADK web interface.
 
 Go ahead and type something like `Amount 500, reason "team dinner"`.
 
-You should see the agent call the `prepare_approval` tool which creates a new expense request and posts it to the FastAPI server. 
-
-The agent then waits for the manager to approve or reject the request. This is done by calling the `external_approval_tool` tool which polls the FastAPI server for the request status every 30 seconds until the request is no longer `pending` (approved or rejected).
+You should see the agent call the `request_approval` tool, which posts a new expense request to the FastAPI server, and then reply that the request is pending. The run ends there: nothing polls or waits.
 
 To approve or reject the request, head to the Streamlit app at `localhost:8501` in your browser and click the `Approve` or `Reject` button for the given expense ID.
 
 ![Pending Expense](images/pending_expense.png)
 
-Hit `Reject` or `Approve` and wait for the agent to poll the FastAPI server for the request status.
+Hit `Reject` or `Approve`. The FastAPI server immediately resumes the agent through the webhook, and it responds based on the human-in-the-loop decision.
 
-Once it does so it should respond accordingly based on the human-in-the-loop decision!
+The resumed reply is produced server-side, so the ADK web UI doesn't show it live: refresh the page (or re-select the session) to see it.
 
 ![ADK Web Interface](images/agent_workflow.png)

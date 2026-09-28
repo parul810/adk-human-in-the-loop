@@ -172,3 +172,12 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Local SQLite databases (approval requests, ADK sessions)
+*.db
+
+# ADK local session/artifact storage
+.adk/
+
+# Lifecycle plugin outbox (SQLite + its -wal/-shm files)
+.agent_lifecycle/

@@ -6,7 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115.12",
-    "google-adk==1.0.0",
+    "google-adk==2.9.2",
+    "litellm>=1.102.1",
     "pydantic>=2.11.5",
     "streamlit>=1.45.1",
 ]
